@@ -1,0 +1,131 @@
+Um pouco de contexto antes: tradicionalmente, os textos acadêmicos sobre orientação a objetos falam que atributos e métodos tem que ser separados em "públicos" e "privados" (e, algumas linguagens colocam mais algumas distinções aí no meio).
+
+A linguagem Java em particular acaba sugerindo - através da sintaxe e das práticas, que a maior parte dos atributos seja privada, e, que para cada um que seja interessante de ser manipulado por usuários da classe, você faça um par de funções - uma para obter o valor do atributo, outra para escrever o valor do atributo - o "getter" e "setter". Pela popularidade que o Java teve como "modelo de linguagem Orientada a Objetos", essas práticas foram, em muita literatura, confundidas com o que O.O. pede.
+
+Em Python, por outro lado, _não_existe_ o conceito de "público e privado" na sintaxe da linguagem. Existe sim, uma convenção de estilo que diz que nomes de atributos, métodos e funções iniciados com _ (um único underscore) não devem ser usados por usuários de uma classe, só pelos próprios implementadores - e que o funcionamento desses métodos e funções pode mudar sem nenhum aviso prévio.
+
+Então, para a maior parte dos atributos em Python, o mais comum é deixá-los simplesmente como um atributo de instância, que qualquer usuário da classe pode ler ou alterar sem depender de nenhum outro mecanismo, como em :
+
+class Ponto:
+   def __init__(self, x=0, y=0):
+        self.x = x
+        self.y = y
+
+No entanto, os "getters" e "setters" podem ter funcionalidades adicionais além de simplesmente gravarem o valor pedido - podem transformar o valor armazenado, ou verificar se o valor está ok.
+
+Em Python, existe um mecanismo muito poderoso, chamado de "protocolo de descritores" (Descriptor Protocol), que faz com que um atributo de classe que seja um objeto que tenha métodos com alguns nomes especiais seja usado de forma diferente nas instâncias daquela classe (e mesmo na classe).
+
+O property é uma função built-in do Python que devolve um objeto com essas propriedades. Inclusive ele pode ser usado como uma função, não precisa ser usado com a sintaxe de decorador ("decorator" - usado com @ na linha que antecede a declaração de funções).
+
+Basicamente o property permite que você declare uma função para obter o valor de um atributo, e, opcionalmente, funções para funcionarem como o 'setter' e 'deleter' daquele atributo.
+
+Por exemplo, na classe "." acima, se eu quiser sempre arredondar o valor de "x" e "y" na leitura, e permitir que apenas valores numéricos sejam inseridos, ela pode ser descrita assim:
+
+from numbers import Number
+
+class Ponto:
+    def __init__(self, x=0, y=0):
+        self.x = x
+        self.y = y
+
+    def _get_x(self):
+        return round(self._x)
+
+    def _set_x(self, value):
+        if not isinstance(value, Number):
+            raise TypeError("...")
+        self._x = value
+
+    x = property(_get_x, _set_x)
+
+    def _get_y(self):
+        return round(self._x)
+
+    def _set_y(self, value):
+        if not isinstance(value, Number):
+            raise TyperErro("...")
+        self._y = value
+
+    y = property(_get_y, _set_y)
+
+Perceba que usei o property como uma função normal - eu poderia ao final da classe até mesmo apagar os métodos do corpo da função, eles vão ser usados apenas indiretamente pelos objetos retornados por property- bastaria adicionar a linha:
+
+del _get_x, _set_x, _get_y, _set_y 
+
+dentro da classe.
+
+Os atributos de classe "x" e "y" agora contém "descriptors": objetos especiais com métodos __get__ e __set__, que vão ser chamados automaticamente pela linguagem, sempre que alguém fizer uma atribuição ou tentar ler qualquer desses atributos. Esses métodos vão chamar as funções originais _get_x, (e etc... ) que foram declaradas aí.
+
+A chamada property foi criada para ser usada da forma acima quando os objetos do tipo "novo" foram criados em Python 2.2 . Nas versões seguintes, com a adição da sintaxe de decorators (Python 2.3), o property foi modificado para poder ser usado como um decorator (Python 2.6). Nesse caso, a primeira função decorada é sempre o "getter" do atributo, e seu nome é usado como nome do atributo especial - e o objeto retornado depois dessa "decoration" acontecer tem os atributos setter e deleter que podem ser usados para decorar as funções para setar os valores (e apagar, se for o caso).
+
+A classe acima fica assim com a sintaxe atual:
+
+from numbers import Number
+
+class Ponto:
+    def __init__(self, x=0, y=0):
+        self.x = x
+        self.y = y
+
+    @property
+    def x(self):
+        return round(self._x)
+
+    @x.setter
+    def x(self, value):
+        if not isinstance(value, Number):
+            raise TypeError("...")
+        self._x = value
+
+    # idem para "y"
+
+em resumo
+
+A não ser que você precise da funcionalidade de transformar/verificar um atributo quando ele é atribuído ou lido, você não precisa usar os properties. Por outro lado, um atributo normal de instância pode ser promovido a qualquer momento para um property quando o seu código evoluir, e isso não vai introduzir nenhuma incompatibilidade - todo o código que usa a sua classe como um atributo normal vai continuar funcionando (desde que ele esteja colocando valores válidos no atributo) - já que a sintaxe que chama o setter continua sendo a atribuição com "=".
+
+Como um último exemplo, veja funcionando no modo interativo. (Colei aquela mesma classe no prompt do IPython, mas acrescentei dois print no getter e setter do x):
+
+In [243]: from numbers import Number
+     ...: 
+     ...: class Ponto:
+     ...:     def __init__(self, x=0, y=0):
+     ...:         self.x = x
+     ...:         self.y = y
+     ...:     @property
+     ...:     def x(self):
+     ...:         print("lendo x")
+     ...:         return round(self._x)
+     ...:     
+     ...:     @x.setter
+     ...:     def x(self, value):
+     ...:         print("escrevendo x")
+     ...:         if not isinstance(value, Number):
+     ...:             raise TyperError("...")
+     ...:         self._x = value
+                  ...
+
+In [244]: a = Ponto()
+escrevendo x
+
+In [245]: a.x = 1.2
+escrevendo x
+
+In [246]: a.x
+lendo x
+Out[246]: 1
+
+In [247]: a.x = "Um ponto dois"
+escrevendo x
+---------------------------------------------------------------------------
+Type Error                                 Traceback (most recent call last)
+<ipython-input-247-0b026b739095> in <module>()
+----> 1 a.x = "Um ponto dois"
+
+<ipython-input-243-0bc80d41c9e1> in x(self, value)
+     15         print("escrevendo x")
+     16         if not isinstance(value, Number):
+---> 17             raise TypeError("...")
+     18         self._x = value
+     19 
+
+TypeError: ...
